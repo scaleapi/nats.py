@@ -1520,12 +1520,6 @@ class Client(object):
             else:
                 raise NatsError('nats: no ssl context provided')
 
-            transport = self._io_writer.transport
-            sock = transport.get_extra_info('socket')
-            if not sock:
-                # This shouldn't happen
-                raise NatsError('nats: unable to get socket')
-
             await self._io_writer.drain()  # just in case something is left
 
             # Check whether to reuse the original hostname for an implicit route.
@@ -1535,11 +1529,10 @@ class Client(object):
             else:
                 hostname = self._current_server.uri.hostname
 
-            self._io_reader, self._io_writer = await asyncio.open_connection(
-                loop=self._loop,
-                limit=DEFAULT_BUFFER_SIZE,
-                sock=sock,
-                ssl=ssl_context,
+            self._io_writer._transport = await self._loop.start_tls(
+                self._io_writer.transport,
+                self._io_writer._protocol,
+                sslcontext=ssl_context,
                 server_hostname=hostname,
             )
 
