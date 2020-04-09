@@ -502,13 +502,43 @@ class Client(object):
         self._subs.clear()
 
         if self._io_writer is not None:
-            self._io_writer.close()
+            await self._close_io_writer()
 
         if do_cbs:
             if self._disconnected_cb is not None:
                 await self._disconnected_cb()
             if self._closed_cb is not None:
                 await self._closed_cb()
+
+    async def _close_io_writer(self):
+        # https://github.com/aio-libs/aiohttp/issues/1925#issuecomment-592596034
+        transport = self._io_writer.transport
+        proto = getattr(transport, "_ssl_protocol", None)
+        if proto is None:
+            self._io_writer.close()
+
+        done = asyncio.Event()
+
+        orig_lost = proto.connection_lost
+        orig_eof_received = proto.eof_received
+
+        def connection_lost(exc):
+            orig_lost(exc)
+            done.set()
+
+        def eof_received():
+            try:
+                orig_eof_received()
+            except AttributeError:
+                # It may happen that eof_received() is called after
+                # _app_protocol and _transport are set to None.
+                pass
+
+        proto.connection_lost = connection_lost
+        proto.eof_received = eof_received
+
+        self._io_writer.close()
+        await done.wait()
 
     async def drain(self, sid=None):
         """
@@ -1236,7 +1266,7 @@ class Client(object):
             self._flusher_task.cancel()
 
         if self._io_writer is not None:
-            self._io_writer.close()
+            await self._close_io_writer()
 
         self._err = None
         if self._disconnected_cb is not None:
