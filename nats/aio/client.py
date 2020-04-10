@@ -519,6 +519,7 @@ class Client(object):
             orig_eof_received = proto.eof_received
         except AttributeError:
             self._io_writer.close()
+            return
 
         done = asyncio.Event()
 
