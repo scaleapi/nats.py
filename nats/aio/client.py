@@ -512,15 +512,15 @@ class Client(object):
 
     async def _close_io_writer(self):
         # https://github.com/aio-libs/aiohttp/issues/1925#issuecomment-592596034
-        transport = self._io_writer.transport
-        proto = getattr(transport, "_ssl_protocol", None)
-        if proto is None:
+        try:
+            transport = self._io_writer.transport
+            proto = transport._ssl_protocol
+            orig_lost = proto.connection_lost
+            orig_eof_received = proto.eof_received
+        except AttributeError:
             self._io_writer.close()
 
         done = asyncio.Event()
-
-        orig_lost = proto.connection_lost
-        orig_eof_received = proto.eof_received
 
         def connection_lost(exc):
             orig_lost(exc)
